@@ -1101,7 +1101,7 @@ def main() -> None:
                     if not isinstance(item, dict):
                         continue
                     # 优先用 IP，和纯域名列表拉开差异
-                    host = str(item.get("ip") or item.get("hostname") or "").strip()
+                    host = str(item.get("hostname") or item.get("ip") or "").strip()
                     info = item.get("info") or {}
                     sstp_info = info.get("sstp") if isinstance(info, dict) else {}
                     port = 443
