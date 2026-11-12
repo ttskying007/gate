@@ -58,25 +58,25 @@ PLACEHOLDER_MARKERS = ("你的", "YOUR_", "YOUR-", "example.com", "yourdomain")
 
 # 静态优选域名池（可用 EDGE_HOSTS 整体覆盖）
 DEFAULT_EDGE_HOSTS = [
-    "shopify.com:443“
-    "nexusmods.com:443“
-    "store.ubi.com:443“
-    "www.decathlon.com:443“
-    "www.asda.com:443“
-    "serviceshub.samsclub.com:443“
-    "www.allianz.com:443“
-    "cookiebot.com:443“
-    "skk.moe:443“
-    "cloudflare.182682.xyz:443“
-    "cloudflare.seeck.cn:443“
-    "ctcc.cloudflare.seeck.cn:443“
-    "cmcc.cloudflare.seeck.cn:443“
-    "cucc.cloudflare.seeck.cn:443“
-    "auto.leilaomi.cc.cd:443“
-    "ct.leilaomi.cc.cd:443“
-    "cu.leilaomi.cc.cd:443“
-    "cm.leilaomi.cc.cd:443“
-    "cf.leilaomi.cc.cd:443“
+    "shopify.com:443"
+    "nexusmods.com:443"
+    "store.ubi.com:443"
+    "www.decathlon.com:443"
+    "www.asda.com:443"
+    "serviceshub.samsclub.com:443"
+    "www.allianz.com:443"
+    "cookiebot.com:443"
+    "skk.moe:443"
+    "cloudflare.182682.xyz:443"
+    "cloudflare.seeck.cn:443"
+    "ctcc.cloudflare.seeck.cn:443"
+    "cmcc.cloudflare.seeck.cn:443"
+    "cucc.cloudflare.seeck.cn:443"
+    "auto.leilaomi.cc.cd:443"
+    "ct.leilaomi.cc.cd:443"
+    "cu.leilaomi.cc.cd:443"
+    "cm.leilaomi.cc.cd:443"
+    "cf.leilaomi.cc.cd:443"
     "saas.sin.fan:443",
     "www.mfyx.cn:443",
     "cf.nyanya.moe:443",
@@ -963,6 +963,66 @@ def main() -> None:
 
     sstp_nodes = to_sstp_nodes(rows)
     sstp_count = len(sstp_nodes)
+
+    # ========== 额外 SSTP 货源开始（直接复制这段） ==========
+    EXTRA_SSTP = [
+        # 格式必须是 "IP:端口" 或 "域名:端口"
+        "46.48.162.66:1661",
+        "92.37.224.94:1251",
+        "5.165.9.52:1475",
+        "106.178.139.202:1803",
+        "126.77.247.81:1630",
+        "218.159.159.79:995",
+        "183.102.224.84:995",
+        "1.54.27.226:1715",
+        "70.30.17.98:1886",
+        "113.53.81.90:1954",
+        "49.49.45.242:1447",
+        "37.21.216.198:1469",
+        "95.54.87.12:1933",
+        "46.37.129.63:995",
+        "109.161.88.87:1937",
+        "91.122.147.219:995",
+        "46.147.200.201:1723",
+        "178.70.88.118:1723",
+        "95.153.31.220:995",
+        "31.173.243.100:995",
+        # 继续往下加你从其他地方复制的更多 IP:端口
+    ]
+
+    extra_count = 0
+    for item in EXTRA_SSTP:
+        item = item.strip()
+        if not item or ":" not in item:
+            continue
+        try:
+            host, port_str = item.rsplit(":", 1)
+            port = int(port_str)
+            if not (1 <= port <= 65535):
+                continue
+            host = host.strip().lower()
+            # 简单判断是否是 IPv4
+            is_ip = bool(re.match(r"^\d{1,3}(\.\d{1,3}){3}$", host))
+            sstp_nodes.append(
+                Node(
+                    host=host,
+                    port=port,
+                    ip=host if is_ip else "",
+                    country="Extra",
+                    country_code="XX",
+                    ping=None,
+                    score=None,
+                )
+            )
+            extra_count += 1
+        except Exception:
+            continue
+
+    if extra_count > 0:
+        log("EXTRA SSTP", f"成功追加 {extra_count} 个额外节点")
+        sstp_count = len(sstp_nodes)
+    # ========== 额外 SSTP 货源结束 ==========
+
     if sstp_count == 0:
         die("VPN GATE", f"从 {raw_count} 个原始节点中没有解析出任何 SSTP(TCP) 节点")
 
