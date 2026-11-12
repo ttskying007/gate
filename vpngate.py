@@ -56,7 +56,6 @@ DEFAULT_OPTIMAL_API = ""
 # 占位符检测：命中任意一个就认为用户还没配置
 PLACEHOLDER_MARKERS = ("你的", "YOUR_", "YOUR-", "example.com", "yourdomain")
 
-# 静态优选域名池（可用 EDGE_HOSTS 整体覆盖）
 DEFAULT_EDGE_HOSTS = [
     "shopify.com:443",
     "nexusmods.com:443",
