@@ -999,7 +999,7 @@ def main() -> None:
             r = session.get(url, timeout=20)
             if r.status_code == 200:
                 for item in r.json():
-                    host = str(item.get("HOSTNAME") or "").strip()
+                    host = str(item.get("HOSTNAME") or item.get("ip") or "").strip()
                     try:
                         port = int(item.get("PORT") or 443)
                     except (TypeError, ValueError):
