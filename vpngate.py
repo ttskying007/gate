@@ -1029,12 +1029,90 @@ def main() -> None:
                     }
                 }
             }
-            r = session.post(
-                "https://vpnhub.me/api/mcp",
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=25,
-            )
+        # ---- 2. VPNHub MCP API（重点：尽量补非纯 VPN Gate 节点） ----
+        try:
+            log("EXTRA SSTP", "拉取 VPNHub SSTP 列表")
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+                "MCP-Protocol-Version": "2025-11-25",
+            }
+            # 多拉几个国家，尽量多拿节点
+            countries = ["jp", "kr", "us", "ru", "th", "vn", "ca", "au", "fr", "de"]
+            for country in countries:
+                payload = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "list_vpns",
+                        "arguments": {
+                            "country": country,
+                            "type": "sstp",
+                            "limit": 50,
+                        },
+                    },
+                }
+                r = session.post(
+                    "https://vpnhub.me/api/mcp",
+                    json=payload,
+                    headers=headers,
+                    timeout=25,
+                )
+                if r.status_code != 200:
+                    log("EXTRA SSTP", f"VPNHub {country} HTTP {r.status_code}")
+                    continue
+
+                data = r.json()
+                vpns = []
+                if isinstance(data, dict):
+                    result = data.get("result") or {}
+                    if isinstance(result, dict):
+                        content = (
+                            result.get("structuredContent")
+                            or result.get("content")
+                            or result
+                        )
+                        if isinstance(content, dict):
+                            vpns = content.get("vpns") or []
+                        elif isinstance(content, list):
+                            # 有的实现会把 text/json 包在 content 列表里
+                            for block in content:
+                                if isinstance(block, dict) and "text" in block:
+                                    try:
+                                        inner = json.loads(block["text"])
+                                        if isinstance(inner, dict):
+                                            vpns = inner.get("vpns") or []
+                                        elif isinstance(inner, list):
+                                            vpns = inner
+                                    except Exception:
+                                        pass
+                                elif isinstance(block, dict) and "vpns" in block:
+                                    vpns = block.get("vpns") or []
+                    elif isinstance(result, list):
+                        vpns = result
+
+                for item in vpns:
+                    if not isinstance(item, dict):
+                        continue
+                    host = str(item.get("hostname") or item.get("ip") or "").strip()
+                    info = item.get("info") or {}
+                    sstp_info = info.get("sstp") if isinstance(info, dict) else {}
+                    port = 443
+                    if isinstance(sstp_info, dict):
+                        try:
+                            port = int(sstp_info.get("tcp") or 443)
+                        except (TypeError, ValueError):
+                            port = 443
+                    else:
+                        try:
+                            port = int(item.get("port") or item.get("tcp") or 443)
+                        except (TypeError, ValueError):
+                            port = 443
+                    country_name = str(item.get("country") or country)
+                    add_node(host, port, country_name, country.upper())
+        except Exception as e:
+            log("EXTRA SSTP", f"VPNHub 失败: {e}")
             if r.status_code == 200:
                 data = r.json()
                 # 兼容不同返回结构
