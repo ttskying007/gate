@@ -65,10 +65,12 @@ jobs:
       - name: Run pipeline
         env:
           CHECK_WORKER: "https://${{ secrets.DOMAIN }}/check?sstp=vpn:vpn@"
-          CHECK_CONCURRENCY: ${{ github.event.inputs.concurrency || '40' }}
+          CHECK_CONCURRENCY: ${{ github.event.inputs.concurrency || '32' }}
           CHECK_TIMEOUT: ${{ github.event.inputs.timeout || '25' }}
           MAX_CHECK_NODES: ${{ github.event.inputs.max_nodes || '0' }}
           MIN_SUCCESS_RATIO: '0'
+          MAX_RESIDENTIAL_PER_COUNTRY: '50'   # 每个国家住宅上限，想更多就调大
+          MAX_DATACENTER_PER_COUNTRY: '20'    # 每个国家机房上限
         run: python vpngate.py
 
       - name: Ensure GitHub Pages is enabled
