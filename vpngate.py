@@ -963,63 +963,155 @@ def main() -> None:
     sstp_nodes = to_sstp_nodes(rows)
     sstp_count = len(sstp_nodes)
 
-    # ========== 额外 SSTP 货源 ==========
-    # 测试环境下不加载，避免破坏单元测试
+    rows, source = fetch_vpngate(cfg, session)
+    raw_count = len(rows)
+    if raw_count == 0:
+        die("VPN GATE", "VPN Gate 返回 0 个原始节点，拒绝生成空结果")
+
+    sstp_nodes = to_sstp_nodes(rows)
+    sstp_count = len(sstp_nodes)
+
+    # ========== 动态额外 SSTP 源（VPN Gate + 外部动态） ==========
     if os.environ.get("PYTEST_CURRENT_TEST") is None and not os.environ.get("SKIP_EXTRA_SSTP"):
-        EXTRA_SSTP = [
-            "46.48.162.66:1661",
-            "92.37.224.94:1251",
-            "5.165.9.52:1475",
-            "106.178.139.202:1803",
-            "126.77.247.81:1630",
-            "218.159.159.79:995",
-            "183.102.224.84:995",
-            "1.54.27.226:1715",
-            "70.30.17.98:1886",
-            "113.53.81.90:1954",
-            "49.49.45.242:1447",
-            "37.21.216.198:1469",
-            "95.54.87.12:1933",
-            "46.37.129.63:995",
-            "109.161.88.87:1937",
-            "91.122.147.219:995",
-            "46.147.200.201:1723",
-            "178.70.88.118:1723",
-            "95.153.31.220:995",
-            "31.173.243.100:995",
-        ]
-
         extra_count = 0
-        for item in EXTRA_SSTP:
-            item = item.strip()
-            if not item or ":" not in item:
-                continue
-            try:
-                host, port_str = item.rsplit(":", 1)
-                port = int(port_str)
-                if not (1 <= port <= 65535):
-                    continue
-                host = host.strip().lower()
-                is_ip = bool(re.match(r"^\d{1,3}(\.\d{1,3}){3}$", host))
-                sstp_nodes.append(
-                    Node(
-                        host=host,
-                        port=port,
-                        ip=host if is_ip else "",
-                        country="Extra",
-                        country_code="XX",
-                        ping=None,
-                        score=None,
-                    )
-                )
-                extra_count += 1
-            except Exception:
-                continue
+        seen: set[tuple[str, int]] = {(n.host, n.port) for n in sstp_nodes}
 
-        if extra_count > 0:
-            log("EXTRA SSTP", f"成功追加 {extra_count} 个额外节点")
+        def add_node(host: str, port: int, country: str = "Extra", code: str = "XX") -> None:
+            nonlocal extra_count
+            host = host.strip().lower()
+            if not host or not (1 <= port <= 65535):
+                return
+            key = (host, port)
+            if key in seen:
+                return
+            seen.add(key)
+            is_ip = bool(re.match(r"^\d{1,3}(\.\d{1,3}){3}$", host))
+            sstp_nodes.append(
+                Node(
+                    host=host,
+                    port=port,
+                    ip=host if is_ip else "",
+                    country=country,
+                    country_code=code,
+                    ping=None,
+                    score=None,
+                )
+            )
+            extra_count += 1
+
+        # ---- 1. FreeSSTP JSON（自动更新） ----
+        try:
+            url = "https://raw.githubusercontent.com/FreeSSTP/server-list/main/Records.json"
+            log("EXTRA SSTP", f"拉取 FreeSSTP: {url}")
+            r = session.get(url, timeout=20)
+            if r.status_code == 200:
+                for item in r.json():
+                    host = str(item.get("HOSTNAME") or "").strip()
+                    port = int(item.get("PORT") or 443)
+                    loc = str(item.get("LOCATION") or "Extra")
+                    add_node(host, port, loc, "XX")
+        except Exception as e:
+            log("EXTRA SSTP", f"FreeSSTP 失败: {e}")
+
+        # ---- 2. VPNHub MCP API（重点：非纯 VPN Gate 节点） ----
+        try:
+            log("EXTRA SSTP", "拉取 VPNHub SSTP 列表")
+            # MCP 是 JSON-RPC，这里用 list_vpns 工具
+            payload = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "list_vpns",
+                    "arguments": {
+                        "type": "sstp",
+                        "limit": "100"
+                    }
+                }
+            }
+            r = session.post(
+                "https://vpnhub.me/api/mcp",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=25,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                # 兼容不同返回结构
+                vpns = []
+                if isinstance(data, dict):
+                    result = data.get("result") or {}
+                    if isinstance(result, dict):
+                        content = result.get("structuredContent") or result.get("content") or result
+                        if isinstance(content, dict):
+                            vpns = content.get("vpns") or []
+                        elif isinstance(content, list):
+                            vpns = content
+                    elif isinstance(result, list):
+                        vpns = result
+                for item in vpns:
+                    if not isinstance(item, dict):
+                        continue
+                    host = str(item.get("hostname") or item.get("ip") or "").strip()
+                    info = item.get("info") or {}
+                    sstp_info = info.get("sstp") if isinstance(info, dict) else {}
+                    port = 443
+                    if isinstance(sstp_info, dict):
+                        try:
+                            port = int(sstp_info.get("tcp") or 443)
+                        except (TypeError, ValueError):
+                            port = 443
+                    else:
+                        try:
+                            port = int(item.get("port") or item.get("tcp") or 443)
+                        except (TypeError, ValueError):
+                            port = 443
+                    country = str(item.get("country") or "Extra")
+                    add_node(host, port, country, country[:2].upper() if len(country) >= 2 else "XX")
+            else:
+                log("EXTRA SSTP", f"VPNHub HTTP {r.status_code}")
+        except Exception as e:
+            log("EXTRA SSTP", f"VPNHub 失败: {e}")
+
+        # ---- 3. 可选：用户自定义 URL（环境变量） ----
+        custom = os.environ.get("EXTRA_SSTP_URL", "").strip()
+        if custom:
+            for url in (u.strip() for u in custom.split(",") if u.strip()):
+                try:
+                    log("EXTRA SSTP", f"拉取自定义源: {url}")
+                    r = session.get(url, timeout=20)
+                    if r.status_code != 200:
+                        continue
+                    text = r.text
+                    if url.endswith(".json") or text.strip().startswith(("[", "{")):
+                        data = r.json()
+                        items = data if isinstance(data, list) else data.get("vpns") or data.get("servers") or []
+                        for item in items:
+                            if isinstance(item, dict):
+                                host = str(item.get("HOSTNAME") or item.get("host") or item.get("hostname") or item.get("ip") or "")
+                                port = int(item.get("PORT") or item.get("port") or 443)
+                                add_node(host, port)
+                    else:
+                        for line in text.splitlines():
+                            line = line.strip()
+                            if not line or line.startswith("#") or line.startswith("==="):
+                                continue
+                            if ":" in line:
+                                host, ps = line.rsplit(":", 1)
+                                try:
+                                    port = int(ps)
+                                except ValueError:
+                                    continue
+                            else:
+                                host, port = line, 443
+                            add_node(host, port)
+                except Exception as e:
+                    log("EXTRA SSTP", f"自定义源失败 ({url}): {e}")
+
+        if extra_count:
+            log("EXTRA SSTP", f"成功追加 {extra_count} 个额外节点（去重后）")
             sstp_count = len(sstp_nodes)
-    # ========== 额外 SSTP 货源结束 ==========
+    # ========== 动态额外源结束 ==========
 
     if sstp_count == 0:
         die("VPN GATE", f"从 {raw_count} 个原始节点中没有解析出任何 SSTP(TCP) 节点")
