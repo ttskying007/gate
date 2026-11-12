@@ -824,7 +824,7 @@ def build_outputs(
         "countries": countries,
     }
 
-
+NODES_URL = os.environ.get("NODES_URL", "https://ttskying007.github.io/gate/nodes.txt")
 def build_nodes_text(data: dict[str, Any], edge_hosts: list[str], cfg: Config) -> str:
     if not edge_hosts:
         raise ConfigError("优选入口池为空，无法生成 nodes.txt")
