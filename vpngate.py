@@ -90,6 +90,8 @@ DEFAULT_EDGE_HOSTS = [
     "best.hzample.kdns.fr:443",
     "ctsg.cfyx.aliyun.20237737.xyz:443",
     "china-unicom.cname.cloudflare.468123.xyz:443",
+    "[2606:4700:4700::1111]:443",
+    "[2606:4700:4700::1001]:443",
 ]
 
 DATA_CENTER_ORG_KEYWORDS = [
@@ -1007,7 +1009,31 @@ def main() -> None:
         except Exception as e:
             log("EXTRA SSTP", f"FreeSSTP 失败: {e}")
 
-        # 2) VPNHub MCP
+        # 2) Delta-Kronecker 累积列表
+        try:
+            url = "https://raw.githubusercontent.com/Delta-Kronecker/Vpn-Gate/main/sstp_hosts.txt"
+            log("EXTRA SSTP", f"拉取 Delta-Kronecker: {url}")
+            r = session.get(url, timeout=20)
+            if r.status_code == 200:
+                for line in r.text.splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#") or line.startswith("==="):
+                        continue
+                    if line.count(":") == 1:
+                        host, ps = line.rsplit(":", 1)
+                        try:
+                            port = int(ps)
+                        except ValueError:
+                            host, port = line, 443
+                    else:
+                        host, port = line, 443
+                    if host and "." not in host:
+                        host = f"{host}.opengw.net"
+                    add_node(host, port)
+        except Exception as e:
+            log("EXTRA SSTP", f"Delta-Kronecker 失败: {e}")
+
+        # 3) VPNHub MCP（优先 IP，多国家）
         try:
             log("EXTRA SSTP", "拉取 VPNHub SSTP 列表")
             headers = {
@@ -1015,7 +1041,10 @@ def main() -> None:
                 "Accept": "application/json, text/event-stream",
                 "MCP-Protocol-Version": "2025-11-25",
             }
-            countries = ["jp", "kr", "us", "ru", "th", "vn", "ca", "au", "fr", "de"]
+            countries = [
+                "jp", "kr", "us", "ru", "th", "vn", "ca", "au", "fr", "de",
+                "tw", "hk", "sg", "uk", "it", "es", "pl", "br", "in", "id",
+            ]
             for country in countries:
                 payload = {
                     "jsonrpc": "2.0",
@@ -1071,7 +1100,8 @@ def main() -> None:
                 for item in vpns:
                     if not isinstance(item, dict):
                         continue
-                    host = str(item.get("hostname") or item.get("ip") or "").strip()
+                    # 优先用 IP，和纯域名列表拉开差异
+                    host = str(item.get("ip") or item.get("hostname") or "").strip()
                     info = item.get("info") or {}
                     sstp_info = info.get("sstp") if isinstance(info, dict) else {}
                     port = 443
@@ -1090,7 +1120,7 @@ def main() -> None:
         except Exception as e:
             log("EXTRA SSTP", f"VPNHub 失败: {e}")
 
-        # 3) 自定义 EXTRA_SSTP_URL
+        # 4) 自定义 EXTRA_SSTP_URL（可选）
         custom = os.environ.get("EXTRA_SSTP_URL", "").strip()
         if custom:
             for url in (u.strip() for u in custom.split(",") if u.strip()):
@@ -1124,7 +1154,7 @@ def main() -> None:
                             line = line.strip()
                             if not line or line.startswith("#") or line.startswith("==="):
                                 continue
-                            if ":" in line:
+                            if ":" in line and line.count(":") == 1:
                                 host, ps = line.rsplit(":", 1)
                                 try:
                                     port = int(ps)
