@@ -58,6 +58,25 @@ PLACEHOLDER_MARKERS = ("你的", "YOUR_", "YOUR-", "example.com", "yourdomain")
 
 # 静态优选域名池（可用 EDGE_HOSTS 整体覆盖）
 DEFAULT_EDGE_HOSTS = [
+    "shopify.com:443“
+    "nexusmods.com:443“
+    "store.ubi.com:443“
+    "www.decathlon.com:443“
+    "www.asda.com:443“
+    "serviceshub.samsclub.com:443“
+    "www.allianz.com:443“
+    "cookiebot.com:443“
+    "skk.moe:443“
+    "cloudflare.182682.xyz:443“
+    "cloudflare.seeck.cn:443“
+    "ctcc.cloudflare.seeck.cn:443“
+    "cmcc.cloudflare.seeck.cn:443“
+    "cucc.cloudflare.seeck.cn:443“
+    "auto.leilaomi.cc.cd:443“
+    "ct.leilaomi.cc.cd:443“
+    "cu.leilaomi.cc.cd:443“
+    "cm.leilaomi.cc.cd:443“
+    "cf.leilaomi.cc.cd:443“
     "saas.sin.fan:443",
     "www.mfyx.cn:443",
     "cf.nyanya.moe:443",
